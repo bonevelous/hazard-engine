@@ -20,55 +20,93 @@
 #include "hazard-actor.h"
 
 void haz_actorUpdate(haz_engine *e, haz_actor *a) {
-	const bool *key = SDL_GetKeyboardState(NULL);
+	a->rend.x = a->phys.pos.x;
+	a->rend.y = a->phys.pos.y;
 
+	haz_actorCollide(e, a);
+
+	if ((a->phys.vel.x < 0 && !a->col.l) ^
+		(a->phys.vel.x > 0 && !a->col.r)) {
+
+		a->phys.pos.x += a->phys.vel.x;
+	}
+
+	if ((a->phys.vel.y < 0 && !a->col.t) ^
+		(a->phys.vel.y > 0 && !a->col.b)) {
+
+		a->phys.pos.y += a->phys.vel.y;
+	}
+
+	switch(a->flag) {
+		case ACTOR_PLAYER:
+			haz_player(e, a);
+			break;
+		default:
+			break;
+	}
+
+	SDL_RenderTexture(e->renderer, a->tex, &a->frame, &a->rend);
+}
+
+void haz_player(haz_engine *e, haz_actor *a) {
+	const bool *key = SDL_GetKeyboardState(NULL);
 	SDL_Point d = {0, 0};
 
 	if (key[SDL_SCANCODE_LEFT] ^ key[SDL_SCANCODE_RIGHT]) {
-		if (key[SDL_SCANCODE_LEFT] && !a->collision.left) d.x = -1;
-		if (key[SDL_SCANCODE_RIGHT] && !a->collision.right) d.x = 1;
+		if (key[SDL_SCANCODE_LEFT]) d.x = -1;
+		if (key[SDL_SCANCODE_RIGHT]) d.x = 1;
 	}
 
 	if (key[SDL_SCANCODE_UP] ^ key[SDL_SCANCODE_DOWN]) {
-		if (key[SDL_SCANCODE_UP] && !a->collision.top) d.y = -1;
-		if (key[SDL_SCANCODE_DOWN] && !a->collision.bottom) d.y = 1;
+		if (key[SDL_SCANCODE_UP]) d.y = -1;
+		if (key[SDL_SCANCODE_DOWN]) d.y = 1;
 	}
 
-	a->position.x += a->speed.x * d.x;
-	a->position.y += a->speed.y * d.y;
-
-	SDL_RenderTexture(e->renderer, a->sprite, &a->frame, &a->position);
+	a->phys.vel.x = a->speed.x * d.x;
+	a->phys.vel.y = a->speed.y * d.y;
 }
 
-
-
-void haz_actorCollideRect(haz_actor *a, SDL_FRect r) {
+void haz_actorCollide(haz_engine *e, haz_actor *a) {
 	haz_line _a = {
-		a->position.x,
-		a->position.x + a->position.w,
-		a->position.y,
-		a->position.y + a->position.h
+		a->rend.x,
+		a->rend.x + a->rend.w,
+		a->rend.y,
+		a->rend.y + a->rend.h
 	};
 
-	haz_line _r = {r.x, r.y, r.x + r.w, r.y + r.h};
-
-	a->collision.left = false;
-	a->collision.right = false;
+	a->col.l= false;
+	a->col.r= false;
 	for (int i = _a.y1; i < _a.y2; i++) {
 		SDL_FPoint pl = {_a.x1 - 1, i};
 		SDL_FPoint pr = {_a.x2, i};
 
-		if (haz_pointInRect(pl, r)) { a->collision.left = true; }
-		if (haz_pointInRect(pr, r)) { a->collision.right = true; }
+		if (haz_pointInTile(e, pl)) { a->col.l= true; }
+		if (haz_pointInTile(e, pr)) { a->col.r= true; }
 	}
 
-	a->collision.top = false;
-	a->collision.bottom = false;
+	a->col.t = false;
+	a->col.b = false;
 	for (int i = _a.x1; i < _a.x2; i++) {
 		SDL_FPoint pt = {i, _a.y1 - 1};
 		SDL_FPoint pb = {i, _a.y2};
 
-		if (haz_pointInRect(pt, r)) {a->collision.top = true; }
-		if (haz_pointInRect(pb, r)) { a->collision.bottom = true; }
+		if (haz_pointInTile(e, pt)) { a->col.t = true; }
+		if (haz_pointInTile(e, pb)) { a->col.b = true; }
 	}
+}
+
+bool haz_actorCollideArea(haz_actor *a, SDL_FRect r) {
+	haz_line _a = {
+		a->rend.x,
+		a->rend.x + a->rend.w,
+		a->rend.y,
+		a->rend.y + a->rend.h
+	};
+
+	haz_line _r = {r.x, r.y, r.x + r.w, r.y + r.h};
+
+	if (_a.x2 < _r.x1 || _a.x1 >= _r.x2) return false;
+	if (_a.y2 < _r.y1 || _a.y1 >= _r.y2) return false;
+
+	return true;
 }

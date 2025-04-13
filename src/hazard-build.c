@@ -19,14 +19,35 @@
 #include "hazard-engine.h"
 #include "hazard-build.h"
 
+#define ZOOMS 8
+
+bool move_view = false;
+SDL_Point last_press = {0, 0};
+SDL_Point last_pos = {0, 0};
+int zoom_lev = 0;
+double zoom[ZOOMS] = {0.125, 0.25, 0.5, 1, 1.5, 2, 3, 4};
+
 void haz_windowSetup(haz_engine *e) {
-	e->title = "Hazard Engine";
-	e->window_size.x = 800;
-	e->window_size.y = 600;
+	e->winsize.x = 800;
+	e->winsize.y = 600;
 	e->window_flag = SDL_WINDOW_RESIZABLE;
+	zoom_lev = 3;
 }
 
 bool haz_loadData(haz_engine *e) {
+	e->camera.y = 24;
+
+	e->targclip.w = MAP_W * e->tilesize.x;
+	e->targclip.h = MAP_H * e->tilesize.y;
+
+	e->target = SDL_CreateTexture(e->renderer, SDL_PIXELFORMAT_RGBA8888,
+		SDL_TEXTUREACCESS_TARGET, e->targclip.w, e->targclip.h);
+
+	if (e->target == NULL) {
+		printf("ERROR: %s\n", SDL_GetError());
+		return false;
+	}
+
 	e->camera.y = 24;
 	e->clear_color.r = 0x55;
 	e->clear_color.g = 0x55;
@@ -86,6 +107,16 @@ void haz_pollEvent(haz_engine *e) {
 			case SDL_EVENT_KEY_DOWN:
 				haz_pollKeyboard(e, e->event.key.key);
 				break;
+			case SDL_EVENT_MOUSE_WHEEL:
+				if (e->event.wheel.y > 0 &&
+					zoom_lev < ZOOMS - 1) {
+
+					zoom_lev += 1;
+				}
+				if (e->event.wheel.y < 0 && zoom_lev > 0) {
+					zoom_lev -= 1;
+				}
+				break;
 			default:
 				break;
 		}
@@ -93,47 +124,74 @@ void haz_pollEvent(haz_engine *e) {
 }
 
 void haz_app(haz_engine *e) {
+	e->targsize.x = e->camera.x;
+	e->targsize.y = e->camera.y;
+	e->targsize.w = (MAP_W * e->tilesize.x) * zoom[zoom_lev];
+	e->targsize.h = (MAP_H * e->tilesize.y) * zoom[zoom_lev];
+
+	SDL_SetRenderTarget(e->renderer, e->target);
+	SDL_SetRenderDrawColor(e->renderer, e->clear_color.r, e->clear_color.g,
+			e->clear_color.b, 0xff);
+
 	SDL_SetRenderDrawColor(e->renderer, 0, 0, 0, 0xff);
-	SDL_FRect mapRect = {
-		e->camera.x,
-		e->camera.y,
-		MAP_W * e->tile_size.x,
-		MAP_H * e->tile_size.y
-	};
-	SDL_RenderFillRect(e->renderer, &mapRect);
+	SDL_RenderFillRect(e->renderer, NULL);
 
-	haz_renderBackground(e);
+	haz_renderBackground(e, false);
 
-	SDL_FRect tile = {0, 0, e->tile_size.x, e->tile_size.y};
-	SDL_FRect pos = {0, 0, e->tile_size.x, e->tile_size.y};
-	pos.x = (((int) e->mouse.position.x / e->tile_size.x) * e->tile_size.x)
-		+ e->camera.x;
+	SDL_FRect tile = {0, 0, e->tilesize.x, e->tilesize.y};
+	SDL_FRect pos = {0, 0, e->tilesize.x, e->tilesize.y};
 
-	pos.y = (((int) e->mouse.position.y / e->tile_size.y) * e->tile_size.y)
-		+ e->camera.y;
+	int x = ((e->mouse.pos.x - e->camera.x) / zoom[zoom_lev]) /
+		e->tilesize.x;
 
-	SDL_RenderTexture(e->renderer, e->tileset, &tile, &pos);
+	int y = ((e->mouse.pos.y - e->camera.y) / zoom[zoom_lev]) /
+		e->tilesize.y;
 
-	int x = (pos.x - e->camera.x) / e->tile_size.x;
-	int y = (pos.y - e->camera.y) / e->tile_size.y;
+	pos.x = ((float) x) * e->tilesize.x;
+	pos.y = ((float) y) * e->tilesize.y;
 
-	if (e->mouse.state == SDL_BUTTON_MASK(1) && x >= 0 && x < MAP_W
-		&& y >= 0 && y < MAP_H) {
+	/*if (haz_pointInRect(e->mouse.pos, e->targsize)) {
+		SDL_HideCursor();
+	}
+	else { SDL_ShowCursor(); };*/
+
+	if (e->mouse.state == SDL_BUTTON_MASK(2)) {
+		if (!move_view) {
+			last_press.x = e->mouse.pos.x;
+			last_press.y = e->mouse.pos.y;
+			last_pos.x = e->camera.x;
+			last_pos.y = e->camera.y;
+			move_view = true;
+		}
+
+		SDL_Point move_to = {
+			e->mouse.pos.x - last_press.x,
+			e->mouse.pos.y - last_press.y
+		};
+
+		e->camera.x = last_pos.x + move_to.x;
+		e->camera.y = last_pos.y + move_to.y;
+	}
+	else { move_view = false; }
+
+	if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) {
+		SDL_RenderTexture(e->renderer, e->tileset, &tile, &pos);
 
 		/*e->map[y][x].active = true;
-		e->map[y][x].tile.x = 0;
-		e->map[y][x].tile.y = 0;*/
+		  e->map[y][x].tile.x = 0;
+		  e->map[y][x].tile.y = 0;*/
 
-		e->map[y][x] = '#';
+		if (e->mouse.state == SDL_BUTTON_MASK(1)) {
+			e->map[y][x] = '#';
+		}
+
+		if (e->mouse.state == SDL_BUTTON_MASK(3)) {
+			e->map[y][x] = '.';
+		}
 	}
 
-	if (e->mouse.state == SDL_BUTTON_MASK(3) && x >= 0 && x < MAP_W
-		&& y >= 0 && y < MAP_H) {
-
-		//e->map[y][x].active = false;
-
-		e->map[y][x] = '.';
-	}
+	SDL_SetRenderTarget(e->renderer, NULL);
+	SDL_RenderTexture(e->renderer, e->target, &e->targclip, &e->targsize);
 }
 
 void haz_renderUI(haz_engine *e) {
@@ -147,4 +205,7 @@ void haz_renderUI(haz_engine *e) {
 	haz_renderText(e, NULL, 4, 4, "SAVE");
 }
 
-void haz_freeData(haz_engine *e) { /* pass */ }
+void haz_freeData(haz_engine *e) {
+	SDL_DestroyTexture(e->target);
+	e->target = NULL;
+}

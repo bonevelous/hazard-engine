@@ -41,7 +41,7 @@ typedef struct haz_line {
 
 typedef struct haz_mouse {
 	SDL_MouseButtonFlags state;
-	SDL_FPoint position;
+	SDL_FPoint pos;
 } haz_mouse;
 
 /*typedef struct haz_tile {
@@ -57,13 +57,18 @@ typedef struct haz_font {
 
 typedef struct haz_engine {
 	int status;
+	char *progname;
+	char *version;
 	SDL_Window *window;
 	char *title;
-	SDL_Rect window_size;
+	SDL_Rect winsize;
 	int window_flag;
 	SDL_Renderer *renderer;
 	SDL_Texture *tileset;
-	SDL_Point tile_size;
+	SDL_Point tilesize;
+	SDL_Texture *target;
+	SDL_FRect targclip;
+	SDL_FRect targsize;
 	SDL_Color clear_color;
 	haz_font mainfont;
 	SDL_Point camera;
@@ -71,6 +76,9 @@ typedef struct haz_engine {
 	haz_mouse mouse;
 	/*haz_tile*/char map[MAP_H][MAP_W];
 } haz_engine;
+
+void haz_printHelp(void);
+void haz_printVersion(haz_engine e);
 
 void haz_windowSetup(haz_engine *e);
 bool haz_init(haz_engine *e);
@@ -85,8 +93,9 @@ void haz_pollKeyboard(haz_engine *e, SDL_Keycode sym);
 void haz_app(haz_engine *e);
 
 bool haz_pointInRect(SDL_FPoint p, SDL_FRect r);
+bool haz_pointInTile(haz_engine *e, SDL_FPoint p);
 
-void haz_renderBackground(haz_engine *e);
+void haz_renderBackground(haz_engine *e, bool camera);
 //void haz_renderForeground(haz_engine *e);
 void haz_renderUI(haz_engine *e);
 

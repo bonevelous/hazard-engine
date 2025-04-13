@@ -19,40 +19,42 @@
 #include "hazard-engine.h"
 #include "hazard-actor.h"
 
-SDL_Texture *target = NULL;
-SDL_FRect targ_clip = {0, 0, 320, 200};
-
 SDL_Color harvkey = {0xff, 0x00, 0xff, 0xff};
 haz_actor Harvey;
 haz_actor gdoor;
 
 void haz_windowSetup(haz_engine *e) {
-	e->title = "Hazard Engine";
-	e->window_size.x = 640;
-	e->window_size.y = 400;
+	e->progname = "Harvey Hazard";
+	e->title = "Harvey Hazard";
+	e->winsize.x = 640;
+	e->winsize.y = 400;
 }
 
 bool haz_loadData(haz_engine *e) {
+	e->targclip.w = e->winsize.x / 2;
+	e->targclip.h = e->winsize.y / 2;
+
 	Harvey.flag = ACTOR_PLAYER;
 	Harvey.frame.w = 16;
 	Harvey.frame.h = 32;
-	Harvey.position.w = 16;
-	Harvey.position.h = 32;
+	Harvey.rend.w = 16;
+	Harvey.rend.h = 32;
 	Harvey.speed.x = 4;
 	Harvey.speed.y = 4;
 
 	gdoor.frame.w = 32;
 	gdoor.frame.h = 48;
-	gdoor.position.w = 32;
-	gdoor.position.h = 48;
+	gdoor.rend.w = 32;
+	gdoor.rend.h = 48;
 
-	target = SDL_CreateTexture(e->renderer, SDL_PIXELFORMAT_RGBA8888,
-		SDL_TEXTUREACCESS_TARGET, e->window_size.x, e->window_size.y);
-	if (target == NULL) {
+	e->target = SDL_CreateTexture(e->renderer, SDL_PIXELFORMAT_RGBA8888,
+		SDL_TEXTUREACCESS_TARGET, e->winsize.x, e->winsize.y);
+
+	if (e->target == NULL) {
 		printf("ERROR: %s\n", SDL_GetError());
-		return 1;
+		return false;
 	}
-	SDL_SetTextureScaleMode(target, SDL_SCALEMODE_NEAREST);
+	SDL_SetTextureScaleMode(e->target, SDL_SCALEMODE_NEAREST);
 
 	if (!haz_loadMap(e, "data/levels/E1L1.dat")) {
 		printf("ERROR: haz_loadMap() failed.\n");
@@ -63,23 +65,23 @@ bool haz_loadData(haz_engine *e) {
 		int x = i % MAP_W;
 		int y = i / MAP_H;
 		if (e->map[y][x] == 'H') {
-			Harvey.position.x = x * e->tile_size.x;
-			Harvey.position.y = (y * e->tile_size.y) - 16;
+			Harvey.phys.pos.x = x * e->tilesize.x;
+			Harvey.phys.pos.y = (y * e->tilesize.y) - 16;
 		}
 		if (e->map[y][x] == 'G') {
-			gdoor.position.x = x * e->tile_size.x;
-			gdoor.position.y = (y * e->tile_size.y) - 32;
+			gdoor.phys.pos.x = x * e->tilesize.x;
+			gdoor.phys.pos.y = (y * e->tilesize.y) - 32;
 		}
 	}
 
-	haz_loadTexture(e, &Harvey.sprite, &harvkey, "data/art/harvey.bmp");
-	if (Harvey.sprite == NULL) {
+	haz_loadTexture(e, &Harvey.tex, &harvkey, "data/art/harvey.bmp");
+	if (Harvey.tex == NULL) {
 		printf("ERROR: %s\n", SDL_GetError());
 		return false;
 	}
 
-	haz_loadTexture(e, &gdoor.sprite, &harvkey, "data/art/green_door.bmp");
-	if (gdoor.sprite == NULL) {
+	haz_loadTexture(e, &gdoor.tex, &harvkey, "data/art/green_door.bmp");
+	if (gdoor.tex == NULL) {
 		printf("ERROR: %s\n", SDL_GetError());
 		return false;
 	}
@@ -113,32 +115,30 @@ void haz_pollEvent(haz_engine *e) {
 }
 
 void haz_app(haz_engine *e) {
-	SDL_SetRenderTarget(e->renderer, target);
+	SDL_SetRenderTarget(e->renderer, e->target);
 	SDL_SetRenderDrawColor(e->renderer, e->clear_color.r, e->clear_color.g,
 		e->clear_color.b, 0xff);
+
 	SDL_RenderFillRect(e->renderer, NULL);
 
-	haz_renderBackground(e);
+	haz_renderBackground(e, true);
 
-	SDL_RenderTexture(e->renderer, gdoor.sprite, &gdoor.frame,
-		&gdoor.position);
-
+	haz_actorUpdate(e, &gdoor);
 	haz_actorUpdate(e, &Harvey);
-	haz_actorCollideRect(&Harvey, gdoor.position);
 
 	SDL_SetRenderTarget(e->renderer, NULL);
-	SDL_RenderTexture(e->renderer, target, &targ_clip, NULL);
+	SDL_RenderTexture(e->renderer, e->target, &e->targclip, NULL);
 }
 
 void haz_renderUI(haz_engine *e) { /* pass */ }
 
 void haz_freeData(haz_engine *e) {
-	SDL_DestroyTexture(gdoor.sprite);
-	gdoor.sprite = NULL;
+	SDL_DestroyTexture(gdoor.tex);
+	gdoor.tex = NULL;
 
-	SDL_DestroyTexture(Harvey.sprite);
-	Harvey.sprite = NULL;
+	SDL_DestroyTexture(Harvey.tex);
+	Harvey.tex = NULL;
 
-	SDL_DestroyTexture(target);
-	target = NULL;
+	SDL_DestroyTexture(e->target);
+	e->target = NULL;
 }

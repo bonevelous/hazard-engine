@@ -18,6 +18,16 @@
 
 #include "hazard-engine.h"
 
+void haz_printHelp(void) {
+	printf("-h  |  --help       Print this help message.\n"
+		"-v  |  --version    Print version and copyright.\n"
+	);
+}
+
+void haz_printVersion(haz_engine e) {
+	printf("%s version %s\n", e.progname, e.version);
+}
+
 bool haz_init(haz_engine *e) {
 	e->status = 1;
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -25,8 +35,8 @@ bool haz_init(haz_engine *e) {
 		return 1;
 	}
 
-	if (!SDL_CreateWindowAndRenderer(e->title, e->window_size.x,
-		e->window_size.y, e->window_flag, &e->window, &e->renderer)) {
+	if (!SDL_CreateWindowAndRenderer(e->title, e->winsize.x,
+		e->winsize.y, e->window_flag, &e->window, &e->renderer)) {
 
 		printf("ERROR: %s\n", SDL_GetError());
 		return 1;
@@ -45,15 +55,14 @@ bool haz_init(haz_engine *e) {
 	e->mainfont.char_size.y = 16;
 
 	SDL_SetRenderDrawBlendMode(e->renderer, SDL_BLENDMODE_BLEND);
-	//SDL_HideCursor();
 
 	haz_loadTexture(e, &e->tileset, NULL, "data/art/tiles.bmp");
 	if (e->tileset == NULL) {
 		printf("ERROR: %s\n", SDL_GetError());
 		return false;
 	}
-	e->tile_size.x = 16;
-	e->tile_size.y = 16;
+	e->tilesize.x = 16;
+	e->tilesize.y = 16;
 
 	if (!haz_loadData(e)) {
 		printf("ERROR: haz_loadData() failed.\n");
@@ -145,14 +154,20 @@ bool haz_saveMap(haz_engine *e, const char *filename) {
 	return true;
 }
 
-void haz_renderBackground(haz_engine *e) {
+void haz_renderBackground(haz_engine *e, bool camera) {
 	for (int i = 0; i < MAP_W * MAP_H; i++) {
-		SDL_FRect tileSRC = {0, 0, e->tile_size.x, e->tile_size.y};
-		SDL_FRect tileDST = {0, 0, e->tile_size.x, e->tile_size.y};
+		SDL_FRect tileSRC = {0, 0, e->tilesize.x, e->tilesize.y};
+		SDL_FRect tileDST = {0, 0, e->tilesize.x, e->tilesize.y};
 		int x = i % MAP_W;
 		int y = i / MAP_W;
-		tileDST.x = (tileSRC.w * x) + e->camera.x;
-		tileDST.y = (tileSRC.h * y) + e->camera.y;
+		if (camera) {
+			tileDST.x = (tileSRC.w * x) + e->camera.x;
+			tileDST.y = (tileSRC.h * y) + e->camera.y;
+		}
+		else {
+			tileDST.x = tileSRC.w * x;
+			tileDST.y = tileSRC.h * y;
+		}
 		//tileSRC.x = tileSRC.w * e->map[y][x].tile.x;
 		//tileSRC.y = tileSRC.h * e->map[y][x].tile.y;
 		//if (e->map[y][x].active == true) {
@@ -233,15 +248,21 @@ bool haz_pointInRect(SDL_FPoint p, SDL_FRect r) {
 	if ((int) p.y < (int) r.y) return false;
 	if ((int) p.x >= (int) r.x + (int) r.w) return false;
 	if ((int) p.y >= (int) r.y + (int) r.h) return false;
-
 	return true;
+}
+
+bool haz_pointInTile(haz_engine *e, SDL_FPoint p) {
+	int x = ((int) p.x / e->tilesize.x);
+	int y = ((int) p.y / e->tilesize.y);
+	if (x > -1 && x < MAP_W && y > -1 && y < MAP_H &&
+		e->map[y][x] == '#') { return true; }
+	else { return false; }
 }
 
 void haz_process(haz_engine *e, int delay) {
 	SDL_Delay(delay);
 
-	e->mouse.state = SDL_GetMouseState(&e->mouse.position.x,
-		&e->mouse.position.y);
+	e->mouse.state = SDL_GetMouseState(&e->mouse.pos.x, &e->mouse.pos.y);
 
 	haz_pollEvent(e);
 

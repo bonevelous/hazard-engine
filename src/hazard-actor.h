@@ -27,22 +27,32 @@ typedef enum haz_actorFlag {
 } haz_actorFlag;
 
 typedef struct haz_collision {
-	bool left;
-	bool right;
-	bool top;
-	bool bottom;
+	bool l;
+	bool r;
+	bool t;
+	bool b;
 } haz_collision;
+
+typedef struct haz_transform {
+	SDL_FPoint acc;
+	SDL_FPoint vel;
+	SDL_FPoint pos;
+} haz_transform;
 
 typedef struct haz_actor {
 	haz_actorFlag flag;
-	SDL_Texture *sprite;
+	SDL_Texture *tex;
 	SDL_FRect frame;
-	SDL_FRect position;
+	SDL_FRect rend;
 	SDL_Point speed;
-	haz_collision collision;
+	haz_collision col;
+	haz_transform phys;
 } haz_actor;
 
 void haz_actorUpdate(haz_engine *e, haz_actor *a);
-void haz_actorCollideRect(haz_actor *a, SDL_FRect r);
+void haz_player(haz_engine *e, haz_actor *a);
+
+bool haz_actorCollideArea(haz_actor *a, SDL_FRect r);
+void haz_actorCollide(haz_engine *e, haz_actor *a);
 
 #endif //HAZARD_ACTOR_H

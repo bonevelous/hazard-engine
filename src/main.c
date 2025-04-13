@@ -21,8 +21,34 @@
 
 haz_engine engine;
 
+static struct option longopt[] = {
+	{"help", 0, 0, 'h'},
+	{"version", 0, 0, 'v'},
+	{0, 0, 0, 0}
+};
+
 int main(int argc, char **argv) {
+	engine.progname = "Hazard Engine";
+	engine.title = "Hazard Engine";
+	engine.version = "0.0.0001a";
 	haz_windowSetup(&engine);
+
+	int indopt = 0;
+	int curopt =  getopt_long(argc, argv, "hv", longopt, &indopt);
+
+	switch(curopt) {
+		case 'h':
+			printf("USAGE: %s [OPTION] [FILE]\n", argv[0]);
+			haz_printHelp();
+			return 0;
+			break;
+		case 'v':
+			haz_printVersion(engine);
+			return 0;
+			break;
+		default:
+			break;
+	}
 
 	if (!haz_init(&engine)) {
 		printf("ERROR: haz_init() failed.\n");
