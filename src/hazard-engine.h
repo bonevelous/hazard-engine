@@ -31,6 +31,7 @@
 
 #define MAP_W 16
 #define MAP_H 12
+#define MAX_OBJ 256
 
 typedef struct haz_line {
 	int x1;
@@ -44,16 +45,21 @@ typedef struct haz_mouse {
 	SDL_FPoint pos;
 } haz_mouse;
 
-/*typedef struct haz_tile {
+typedef struct haz_tile {
 	bool active;
 	SDL_Point tile;
-} haz_tile;*/
+} haz_tile;
 
-typedef struct haz_font {
-	SDL_Texture *font;
-	SDL_FPoint texture_size;
-	SDL_Point char_size;
-} haz_font;
+typedef struct haz_objectInfo {
+	bool lonely;
+	SDL_Point pos;
+	SDL_Texture *tex;
+} haz_objectInfo;
+
+typedef struct haz_map {
+	haz_tile tiles[MAP_H][MAP_W];
+	haz_objectInfo *objects[MAX_OBJ];
+} haz_map;
 
 typedef struct haz_engine {
 	int status;
@@ -61,20 +67,16 @@ typedef struct haz_engine {
 	char *version;
 	SDL_Window *window;
 	char *title;
-	SDL_Rect winsize;
+	SDL_Rect size;
 	int window_flag;
-	SDL_Renderer *renderer;
+	SDL_Renderer *ren;
 	SDL_Texture *tileset;
 	SDL_Point tilesize;
-	SDL_Texture *target;
-	SDL_FRect targclip;
-	SDL_FRect targsize;
 	SDL_Color clear_color;
-	haz_font mainfont;
 	SDL_Point camera;
 	SDL_Event event;
 	haz_mouse mouse;
-	/*haz_tile*/char map[MAP_H][MAP_W];
+	haz_map map;
 } haz_engine;
 
 void haz_printHelp(void);
@@ -97,9 +99,6 @@ bool haz_pointInTile(haz_engine *e, SDL_FPoint p);
 
 void haz_renderBackground(haz_engine *e, bool camera);
 //void haz_renderForeground(haz_engine *e);
-void haz_renderUI(haz_engine *e);
-
-void haz_renderText(haz_engine *e, haz_font *font, int x, int y, char *text);
 
 void haz_freeData(haz_engine *e);
 void haz_quit(haz_engine *e);

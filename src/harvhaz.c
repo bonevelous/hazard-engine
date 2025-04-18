@@ -18,6 +18,9 @@
 
 #include "hazard-engine.h"
 #include "hazard-actor.h"
+#include "hazard-ui.h"
+
+haz_UIelement targ;
 
 SDL_Color harvkey = {0xff, 0x00, 0xff, 0xff};
 haz_actor Harvey;
@@ -26,13 +29,13 @@ haz_actor gdoor;
 void haz_windowSetup(haz_engine *e) {
 	e->progname = "Harvey Hazard";
 	e->title = "Harvey Hazard";
-	e->winsize.x = 640;
-	e->winsize.y = 400;
+	e->size.x = 640;
+	e->size.y = 400;
 }
 
 bool haz_loadData(haz_engine *e) {
-	e->targclip.w = e->winsize.x / 2;
-	e->targclip.h = e->winsize.y / 2;
+	targ.rend.w = e->size.x / 2;
+	targ.rend.h = e->size.y / 2;
 
 	Harvey.flag = ACTOR_PLAYER;
 	Harvey.frame.w = 16;
@@ -47,21 +50,22 @@ bool haz_loadData(haz_engine *e) {
 	gdoor.rend.w = 32;
 	gdoor.rend.h = 48;
 
-	e->target = SDL_CreateTexture(e->renderer, SDL_PIXELFORMAT_RGBA8888,
-		SDL_TEXTUREACCESS_TARGET, e->winsize.x, e->winsize.y);
+	SDL_PixelFormat pix = SDL_PIXELFORMAT_RGBA8888;
+	SDL_TextureAccess acc = SDL_TEXTUREACCESS_TARGET;
+	targ.tex = SDL_CreateTexture(e->ren, pix, acc, e->size.x, e->size.y);
 
-	if (e->target == NULL) {
+	if (targ.tex == NULL) {
 		printf("ERROR: %s\n", SDL_GetError());
 		return false;
 	}
-	SDL_SetTextureScaleMode(e->target, SDL_SCALEMODE_NEAREST);
+	SDL_SetTextureScaleMode(targ.tex, SDL_SCALEMODE_NEAREST);
 
 	if (!haz_loadMap(e, "data/levels/E1L1.dat")) {
 		printf("ERROR: haz_loadMap() failed.\n");
 		return false;
 	}
 
-	for (int i = 0; i < MAP_W * MAP_H; i++) {
+	/*for (int i = 0; i < MAP_W * MAP_H; i++) {
 		int x = i % MAP_W;
 		int y = i / MAP_H;
 		if (e->map[y][x] == 'H') {
@@ -72,7 +76,7 @@ bool haz_loadData(haz_engine *e) {
 			gdoor.phys.pos.x = x * e->tilesize.x;
 			gdoor.phys.pos.y = (y * e->tilesize.y) - 32;
 		}
-	}
+	}*/
 
 	haz_loadTexture(e, &Harvey.tex, &harvkey, "data/art/harvey.bmp");
 	if (Harvey.tex == NULL) {
@@ -115,19 +119,19 @@ void haz_pollEvent(haz_engine *e) {
 }
 
 void haz_app(haz_engine *e) {
-	SDL_SetRenderTarget(e->renderer, e->target);
-	SDL_SetRenderDrawColor(e->renderer, e->clear_color.r, e->clear_color.g,
+	SDL_SetRenderTarget(e->ren, targ.tex);
+	SDL_SetRenderDrawColor(e->ren, e->clear_color.r, e->clear_color.g,
 		e->clear_color.b, 0xff);
 
-	SDL_RenderFillRect(e->renderer, NULL);
+	SDL_RenderFillRect(e->ren, NULL);
 
 	haz_renderBackground(e, true);
 
 	haz_actorUpdate(e, &gdoor);
 	haz_actorUpdate(e, &Harvey);
 
-	SDL_SetRenderTarget(e->renderer, NULL);
-	SDL_RenderTexture(e->renderer, e->target, &e->targclip, NULL);
+	SDL_SetRenderTarget(e->ren, NULL);
+	SDL_RenderTexture(e->ren, targ.tex, &targ.rend, NULL);
 }
 
 void haz_renderUI(haz_engine *e) { /* pass */ }
@@ -139,6 +143,6 @@ void haz_freeData(haz_engine *e) {
 	SDL_DestroyTexture(Harvey.tex);
 	Harvey.tex = NULL;
 
-	SDL_DestroyTexture(e->target);
-	e->target = NULL;
+	SDL_DestroyTexture(targ.tex);
+	targ.tex = NULL;
 }

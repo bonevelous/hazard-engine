@@ -17,47 +17,78 @@
  */
 
 #include "hazard-engine.h"
+#include "hazard-ui.h"
 #include "hazard-build.h"
 
-#define ZOOMS 8
+#define MAX_Z 8
+#define MIN_Z 0.125
+
+haz_UIelement map_ui;
+haz_UIelement frame = {{32, 24, 800, 600}};
+
+build_mode mode = TILE;
+haz_UIelement smode = {{8, 56, 16, 16}};
+SDL_FRect tmode = {8, 32, 16, 16};
+
+haz_font mfont;
 
 bool move_view = false;
 SDL_Point last_press = {0, 0};
 SDL_Point last_pos = {0, 0};
-int zoom_lev = 0;
-double zoom[ZOOMS] = {0.125, 0.25, 0.5, 1, 1.5, 2, 3, 4};
+double zoom = 1;
+SDL_PixelFormat pix = SDL_PIXELFORMAT_RGBA8888;
+SDL_TextureAccess acc = SDL_TEXTUREACCESS_TARGET;
+
+haz_text save_text = {
+	{4, 4},
+	1,
+	"SAVE"
+};
 
 void haz_windowSetup(haz_engine *e) {
-	e->winsize.x = 800;
-	e->winsize.y = 600;
+	e->size.x = 800;
+	e->size.y = 600;
 	e->window_flag = SDL_WINDOW_RESIZABLE;
-	zoom_lev = 3;
 }
 
 bool haz_loadData(haz_engine *e) {
-	e->camera.y = 24;
+	map_ui.rend.w = MAP_W * e->tilesize.x;
+	map_ui.rend.h = MAP_H * e->tilesize.y;
 
-	e->targclip.w = MAP_W * e->tilesize.x;
-	e->targclip.h = MAP_H * e->tilesize.y;
+	map_ui.tex = SDL_CreateTexture(e->ren, pix, acc, map_ui.rend.w,
+		map_ui.rend.h);
 
-	e->target = SDL_CreateTexture(e->renderer, SDL_PIXELFORMAT_RGBA8888,
-		SDL_TEXTUREACCESS_TARGET, e->targclip.w, e->targclip.h);
-
-	if (e->target == NULL) {
+	if (map_ui.tex == NULL) {
 		printf("ERROR: %s\n", SDL_GetError());
 		return false;
 	}
 
-	e->camera.y = 24;
-	e->clear_color.r = 0x55;
-	e->clear_color.g = 0x55;
-	e->clear_color.b = 0x55;
+	SDL_Color k = {0, 0, 0, 0xff};
+	haz_loadTexture(e, &mfont.tex, &k, "data/art/mainfont.bmp");
+	if (mfont.tex == NULL) {
+		printf("ERROR: %s\n", SDL_GetError());
+		return false;
+	}
+
+	SDL_GetTextureSize(mfont.tex, &mfont.bmp_size.x,
+		&mfont.bmp_size.y);
+
+	mfont.char_size.x = 9;
+	mfont.char_size.y = 16;
 
 	for (int i = 0; i < MAP_W * MAP_H; i++) {
 		int x = i % MAP_W;
 		int y = i / MAP_W;
 
-		e->map[y][x] = '.';
+		e->map.tiles[y][x].active = false;
+	}
+
+	k.r = 0xff;
+	k.b = 0xff;
+	haz_loadTexture(e, &smode.tex, &k, "data/art/spritemode.bmp");
+	if (smode.tex == NULL) {
+		printf("ERROR: %s\n", SDL_GetError());
+		return false;
 	}
 
 	return true;
@@ -65,20 +96,14 @@ bool haz_loadData(haz_engine *e) {
 
 bool hbuild_saveMap(haz_engine *e, const char *filename) {
 	FILE *file = NULL;
-	file = fopen(filename, "w");
+	file = fopen(filename, "wb");
 	if (file == NULL) {
 		printf("ERROR: Failed fopen() with %s\n", filename);
 		return false;
 	}
 
-	for (int i = 0; i < MAP_W * MAP_H; i++) {
-		int x = i % MAP_W;
-		int y = i / MAP_W;
-
-		fputc(e->map[y][x], file);
-		if (x == MAP_W - 1) fputc('\n', file);
-	}
-	fputc('\0', file);
+	size_t size = sizeof(e->map);
+	size_t w = fwrite(&e->map, sizeof(haz_map), size, file);
 
 	fclose(file);
 	file = NULL;
@@ -108,13 +133,11 @@ void haz_pollEvent(haz_engine *e) {
 				haz_pollKeyboard(e, e->event.key.key);
 				break;
 			case SDL_EVENT_MOUSE_WHEEL:
-				if (e->event.wheel.y > 0 &&
-					zoom_lev < ZOOMS - 1) {
-
-					zoom_lev += 1;
+				if (e->event.wheel.y > 0 && zoom < MAX_Z) {
+					zoom *= 2;
 				}
-				if (e->event.wheel.y < 0 && zoom_lev > 0) {
-					zoom_lev -= 1;
+				if (e->event.wheel.y < 0 && zoom > MIN_Z) {
+					zoom /= 2;
 				}
 				break;
 			default:
@@ -124,36 +147,56 @@ void haz_pollEvent(haz_engine *e) {
 }
 
 void haz_app(haz_engine *e) {
-	e->targsize.x = e->camera.x;
-	e->targsize.y = e->camera.y;
-	e->targsize.w = (MAP_W * e->tilesize.x) * zoom[zoom_lev];
-	e->targsize.h = (MAP_H * e->tilesize.y) * zoom[zoom_lev];
+	int wx, wy;
+	SDL_GetWindowSize(e->window, &wx, &wy);
 
-	SDL_SetRenderTarget(e->renderer, e->target);
-	SDL_SetRenderDrawColor(e->renderer, e->clear_color.r, e->clear_color.g,
-			e->clear_color.b, 0xff);
+	frame.rend.w = wx - frame.rend.x - 6;
+	frame.rend.h = wy - frame.rend.y - 6;
 
-	SDL_SetRenderDrawColor(e->renderer, 0, 0, 0, 0xff);
-	SDL_RenderFillRect(e->renderer, NULL);
+	frame.tex = SDL_CreateTexture(e->ren, pix, acc, frame.rend.w,
+		frame.rend.h);
+
+	map_ui.rend.x = e->camera.x;
+	map_ui.rend.y = e->camera.y;
+	map_ui.rend.w = (MAP_W * e->tilesize.x) * zoom;
+	map_ui.rend.h = (MAP_H * e->tilesize.y) * zoom;
+
+	SDL_SetRenderDrawColor(e->ren, 0xc0, 0xc0, 0xc0, 0xff);
+	SDL_RenderFillRect(e->ren, NULL);
+
+	SDL_FlushRenderer(e->ren);
+
+	SDL_SetRenderTarget(e->ren, frame.tex);
+	SDL_SetRenderDrawColor(e->ren, 0x80, 0x80, 0x80, 0xff);
+	SDL_RenderFillRect(e->ren, NULL);
+
+	SDL_FlushRenderer(e->ren);
+
+	SDL_SetRenderTarget(e->ren, map_ui.tex);
+	SDL_SetRenderDrawColor(e->ren, 0, 0, 0, 0xff);
+	SDL_RenderFillRect(e->ren, NULL);
 
 	haz_renderBackground(e, false);
 
 	SDL_FRect tile = {0, 0, e->tilesize.x, e->tilesize.y};
 	SDL_FRect pos = {0, 0, e->tilesize.x, e->tilesize.y};
 
-	int x = ((e->mouse.pos.x - e->camera.x) / zoom[zoom_lev]) /
+	int x = ((e->mouse.pos.x - e->camera.x - frame.rend.x) / zoom) /
 		e->tilesize.x;
 
-	int y = ((e->mouse.pos.y - e->camera.y) / zoom[zoom_lev]) /
+	int y = ((e->mouse.pos.y - e->camera.y - frame.rend.y) / zoom) /
 		e->tilesize.y;
 
 	pos.x = ((float) x) * e->tilesize.x;
 	pos.y = ((float) y) * e->tilesize.y;
 
-	/*if (haz_pointInRect(e->mouse.pos, e->targsize)) {
+	SDL_FRect mrend = {0, 0, map_ui.rend.w, map_ui.rend.h};
+	mrend.x = map_ui.rend.x + frame.rend.x;
+	mrend.y = map_ui.rend.y + frame.rend.y;
+	if (haz_pointInRect(e->mouse.pos, mrend)) {
 		SDL_HideCursor();
 	}
-	else { SDL_ShowCursor(); };*/
+	else { SDL_ShowCursor(); };
 
 	if (e->mouse.state == SDL_BUTTON_MASK(2)) {
 		if (!move_view) {
@@ -174,38 +217,68 @@ void haz_app(haz_engine *e) {
 	}
 	else { move_view = false; }
 
-	if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) {
-		SDL_RenderTexture(e->renderer, e->tileset, &tile, &pos);
+	if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H &&
+		haz_pointInRect(e->mouse.pos, mrend)) {
 
-		/*e->map[y][x].active = true;
-		  e->map[y][x].tile.x = 0;
-		  e->map[y][x].tile.y = 0;*/
+		SDL_RenderTexture(e->ren, e->tileset, &tile, &pos);
 
 		if (e->mouse.state == SDL_BUTTON_MASK(1)) {
-			e->map[y][x] = '#';
+			e->map.tiles[y][x].active = true;
 		}
 
 		if (e->mouse.state == SDL_BUTTON_MASK(3)) {
-			e->map[y][x] = '.';
+			e->map.tiles[y][x].active = false;
 		}
 	}
 
-	SDL_SetRenderTarget(e->renderer, NULL);
-	SDL_RenderTexture(e->renderer, e->target, &e->targclip, &e->targsize);
-}
+	SDL_SetRenderTarget(e->ren, frame.tex);
+	SDL_RenderTexture(e->ren, map_ui.tex, NULL, &map_ui.rend);
+	SDL_FlushRenderer(e->ren);
+	SDL_SetRenderTarget(e->ren, NULL);
+	SDL_RenderTexture(e->ren, frame.tex, NULL, &frame.rend);
 
-void haz_renderUI(haz_engine *e) {
-	/*int w, h;
-	SDL_GetWindowSize(e->window, &w, &h);
+	SDL_DestroyTexture(frame.tex);
+	frame.tex = NULL;
 
-	SDL_FRect topbar = {0, 0, w, 24};
-	SDL_SetRenderDrawColor(e->renderer, 0xc0, 0xc0, 0xc0, 0xff);
-	SDL_RenderFillRect(e->renderer, &topbar);*/
+	SDL_RenderTexture(e->ren, e->tileset, &tile, &tmode);
+	SDL_SetRenderDrawColor(e->ren, 0xff, 0, 0, 0xff);
+	if (haz_pointInRect(e->mouse.pos, tmode)) {
+		SDL_RenderRect(e->ren, &tmode);
+		if (e->mouse.state == SDL_BUTTON_MASK(1)) { mode = TILE; }
+	}
 
-	haz_renderText(e, NULL, 4, 4, "SAVE");
+	if (haz_pointInRect(e->mouse.pos, smode.rend)) {
+		SDL_RenderRect(e->ren, &smode.rend);
+		if (e->mouse.state == SDL_BUTTON_MASK(1)) { mode = SPRITE; }
+	}
+
+	switch(mode) {
+		/*case TILE:
+			tempchar = '#';
+			break;
+		case SPRITE:
+			tempchar = 'H';
+			break;*/
+		default:
+			break;
+	}
+
+	SDL_RenderTexture(e->ren, smode.tex, NULL, &smode.rend);
+
+	SDL_SetRenderDrawColor(e->ren, 0, 0, 0, 0xff);
+	haz_renderText(e, &mfont, &save_text);
 }
 
 void haz_freeData(haz_engine *e) {
-	SDL_DestroyTexture(e->target);
-	e->target = NULL;
+	SDL_DestroyTexture(smode.tex);
+	smode.tex = NULL;
+
+	SDL_DestroyTexture(frame.tex);
+	frame.tex = NULL;
+
+	SDL_DestroyTexture(mfont.tex);
+	mfont.tex = NULL;
+
+	SDL_DestroyTexture(map_ui.tex);
+	map_ui.tex = NULL;
 }

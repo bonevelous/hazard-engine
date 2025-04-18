@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED True)
 set(SOURCES
 	${CMAKE_SOURCE_DIR}/src/main.c
 	${CMAKE_SOURCE_DIR}/src/hazard-engine.c
+	${CMAKE_SOURCE_DIR}/src/hazard-ui.c
 )
 
 set(BUILD_SOURCES ${SOURCES}

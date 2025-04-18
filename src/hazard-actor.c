@@ -45,7 +45,7 @@ void haz_actorUpdate(haz_engine *e, haz_actor *a) {
 			break;
 	}
 
-	SDL_RenderTexture(e->renderer, a->tex, &a->frame, &a->rend);
+	SDL_RenderTexture(e->ren, a->tex, &a->frame, &a->rend);
 }
 
 void haz_player(haz_engine *e, haz_actor *a) {

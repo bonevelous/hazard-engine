@@ -30,31 +30,20 @@ void haz_printVersion(haz_engine e) {
 
 bool haz_init(haz_engine *e) {
 	e->status = 1;
+
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		printf("ERROR: %s\n", SDL_GetError());
 		return 1;
 	}
 
-	if (!SDL_CreateWindowAndRenderer(e->title, e->winsize.x,
-		e->winsize.y, e->window_flag, &e->window, &e->renderer)) {
+	if (!SDL_CreateWindowAndRenderer(e->title, e->size.x, e->size.y,
+		e->window_flag, &e->window, &e->ren)) {
 
 		printf("ERROR: %s\n", SDL_GetError());
 		return 1;
 	}
 
-	SDL_Color mainkey = {0, 0, 0, 0xff};
-	haz_loadTexture(e, &e->mainfont.font, &mainkey,
-		"data/art/mainfont.bmp");
-	if (e->mainfont.font == NULL) {
-		printf("ERROR: %s\n", SDL_GetError());
-		return 1;
-	}
-	SDL_GetTextureSize(e->mainfont.font, &e->mainfont.texture_size.x,
-		&e->mainfont.texture_size.y);
-	e->mainfont.char_size.x = 9;
-	e->mainfont.char_size.y = 16;
-
-	SDL_SetRenderDrawBlendMode(e->renderer, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(e->ren, SDL_BLENDMODE_BLEND);
 
 	haz_loadTexture(e, &e->tileset, NULL, "data/art/tiles.bmp");
 	if (e->tileset == NULL) {
@@ -63,6 +52,8 @@ bool haz_init(haz_engine *e) {
 	}
 	e->tilesize.x = 16;
 	e->tilesize.y = 16;
+
+	SDL_SetTextureScaleMode(e->tileset, SDL_SCALEMODE_NEAREST);
 
 	if (!haz_loadData(e)) {
 		printf("ERROR: haz_loadData() failed.\n");
@@ -74,34 +65,8 @@ bool haz_init(haz_engine *e) {
 bool haz_loadTexture(haz_engine *e, SDL_Texture **texture, SDL_Color *key,
 	const char *filename) {
 
-	long size = pathconf(".", _PC_PATH_MAX);
-	char *buf = NULL;
-	char *cwd = NULL;
-	buf = (char *) malloc((size_t) size);
-	if (buf == NULL) {
-		printf("ERROR: Couldn't get size of path\n");
-		return false;
-	}
-
-	cwd = getcwd(buf, (size_t) size);
-	if (cwd == NULL) {
-		printf("ERROR: Couldn't get cwd\n");
-		return false;
-	}
-
-	char *dir = NULL;
-	dir = (char *) malloc(sizeof(buf) + 512);
-	dir = strcpy(dir, "");
-	dir = strcat(dir, cwd);
-	dir = strcat(dir, "/");
-	dir = strcat(dir, filename);
-	if (dir == NULL) {
-		printf("ERROR: Couldn't find file\n");
-		return false;
-	}
-
 	SDL_Surface *surface = NULL;
-	surface = SDL_LoadBMP(dir);
+	surface = SDL_LoadBMP(filename);
 	if (surface == NULL) {
 		printf("ERROR: %s\n", SDL_GetError());
 		return false;
@@ -113,7 +78,7 @@ bool haz_loadTexture(haz_engine *e, SDL_Texture **texture, SDL_Color *key,
 		SDL_SetSurfaceColorKey(surface, true, color);
 	}
 
-	*texture = SDL_CreateTextureFromSurface(e->renderer, surface);
+	*texture = SDL_CreateTextureFromSurface(e->ren, surface);
 	if (*texture == NULL) {
 		printf("ERROR: %s\n", SDL_GetError());
 		return false;
@@ -121,35 +86,6 @@ bool haz_loadTexture(haz_engine *e, SDL_Texture **texture, SDL_Color *key,
 
 	SDL_DestroySurface(surface);
 	surface = NULL;
-
-	free(dir);
-	dir = NULL;
-
-	free(cwd);
-	cwd = NULL;
-
-	return true;
-}
-
-bool haz_saveMap(haz_engine *e, const char *filename) {
-	FILE *file = NULL;
-	file = fopen(filename, "w");
-	if (file == NULL) {
-		printf("ERROR: Failed fopen() with %s\n", filename);
-		return false;
-	}
-
-	for (int i = 0; i < MAP_W * MAP_H; i++) {
-		int x = i % MAP_W;
-		int y = i / MAP_W;
-
-		fputc(e->map[y][x], file);
-		if (x == MAP_W - 1) fputc('\n', file);
-	}
-	fputc('\0', file);
-
-	fclose(file);
-	file = NULL;
 
 	return true;
 }
@@ -160,6 +96,7 @@ void haz_renderBackground(haz_engine *e, bool camera) {
 		SDL_FRect tileDST = {0, 0, e->tilesize.x, e->tilesize.y};
 		int x = i % MAP_W;
 		int y = i / MAP_W;
+
 		if (camera) {
 			tileDST.x = (tileSRC.w * x) + e->camera.x;
 			tileDST.y = (tileSRC.h * y) + e->camera.y;
@@ -168,74 +105,26 @@ void haz_renderBackground(haz_engine *e, bool camera) {
 			tileDST.x = tileSRC.w * x;
 			tileDST.y = tileSRC.h * y;
 		}
-		//tileSRC.x = tileSRC.w * e->map[y][x].tile.x;
-		//tileSRC.y = tileSRC.h * e->map[y][x].tile.y;
-		//if (e->map[y][x].active == true) {
-		if (e->map[y][x] == '#') {
-			SDL_RenderTexture(e->renderer, e->tileset, &tileSRC,
+
+		tileSRC.x = tileSRC.w * e->map.tiles[y][x].tile.x;
+		tileSRC.y = tileSRC.h * e->map.tiles[y][x].tile.y;
+		if (e->map.tiles[y][x].active == true) {
+			SDL_RenderTexture(e->ren, e->tileset, &tileSRC,
 				&tileDST);
-		}
-	}
-}
-
-void haz_renderText(haz_engine *e, haz_font *font, int x, int y, char *text) {
-	SDL_FRect textSRC = {0, 0, 9, 16};
-	if (font != NULL) {
-		textSRC.w = font->char_size.x;
-		textSRC.h = font->char_size.y;
-	}
-
-	SDL_Point size = {
-		e->mainfont.texture_size.x / 9,
-		e->mainfont.texture_size.y / 16
-	};
-
-	if (font != NULL) {
-		size.x = (font->texture_size.x / textSRC.w);
-		size.y = (font->texture_size.y / textSRC.h);
-	}
-
-	for (int i = 0; i < strlen(text); i++) {
-		textSRC.x = (text[i] % size.x) * textSRC.w;
-		textSRC.y = (text[i] / size.x) * textSRC.h;
-
-		SDL_FRect textDST = {
-			(i * textSRC.w) + x,
-			y, textSRC.w, textSRC.h
-		};
-
-		if (font == NULL) {
-			SDL_RenderTexture(e->renderer, e->mainfont.font,
-				&textSRC, &textDST);
-		}
-		else {
-			SDL_RenderTexture(e->renderer, font->font, &textSRC,
-				&textDST);
 		}
 	}
 }
 
 bool haz_loadMap(haz_engine *e, const char *filename) {
 	FILE *file = NULL;
-	file = fopen(filename, "r");
+	file = fopen(filename, "rb");
 	if (file == NULL) {
 		printf("ERROR: Failed fopen() with %s\n", filename);
 		return false;
 	}
 
-	int x = 0;
-	int y = 0;
-	char c;
-	while ((c = fgetc(file)) != EOF) {
-		if (c == '\n') {
-			x = 0;
-			++y;
-		}
-		else {
-			e->map[y][x] = c;
-			++x;
-		}
-	}
+	size_t size = sizeof(e->map);
+	size_t r = fread(&e->map, sizeof(haz_map), size, file);
 
 	fclose(file);
 	file = NULL;
@@ -255,7 +144,7 @@ bool haz_pointInTile(haz_engine *e, SDL_FPoint p) {
 	int x = ((int) p.x / e->tilesize.x);
 	int y = ((int) p.y / e->tilesize.y);
 	if (x > -1 && x < MAP_W && y > -1 && y < MAP_H &&
-		e->map[y][x] == '#') { return true; }
+		e->map.tiles[y][x].active) { return true; }
 	else { return false; }
 }
 
@@ -266,18 +155,16 @@ void haz_process(haz_engine *e, int delay) {
 
 	haz_pollEvent(e);
 
-	SDL_SetRenderDrawColor(e->renderer, 0, 0, 0, 0xff);
-	SDL_RenderClear(e->renderer);
+	SDL_SetRenderDrawColor(e->ren, 0, 0, 0, 0xff);
+	SDL_RenderClear(e->ren);
 
-	SDL_SetRenderDrawColor(e->renderer, e->clear_color.r, e->clear_color.g,
+	SDL_SetRenderDrawColor(e->ren, e->clear_color.r, e->clear_color.g,
 		e->clear_color.b, 0xff);
-	SDL_RenderFillRect(e->renderer, NULL);
+	SDL_RenderFillRect(e->ren, NULL);
 
 	haz_app(e);
-	//haz_renderForeground(e);
-	haz_renderUI(e);
 
-	SDL_RenderPresent(e->renderer);
+	SDL_RenderPresent(e->ren);
 }
 
 void haz_quit(haz_engine *e) {
@@ -286,11 +173,8 @@ void haz_quit(haz_engine *e) {
 	SDL_DestroyTexture(e->tileset);
 	e->tileset = NULL;
 
-	SDL_DestroyTexture(e->mainfont.font);
-	e->mainfont.font = NULL;
-
-	SDL_DestroyRenderer(e->renderer);
-	e->renderer = NULL;
+	SDL_DestroyRenderer(e->ren);
+	e->ren = NULL;
 
 	SDL_DestroyWindow(e->window);
 	e->window = NULL;

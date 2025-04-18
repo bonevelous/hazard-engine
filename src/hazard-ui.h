@@ -1,6 +1,6 @@
 /*   Hazard Engine - 2D Game engine in C
  *   Copyright (C) 2025 Matthew Gobbi
- *   hazard-build.c - Level editor header
+ *   hazard-engine.c - Engine Functions
  *
  *   This program is free software: you can redistribute it and/or modify it
  *   under the terms of the GNU General Public License as published by the
@@ -16,18 +16,30 @@
  *   with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef HAZARD_BUILD_H
-#define HAZARD_BUILD_H
+#ifndef HAZARD_UI_H
+#define HAZARD_UI_H
 
 #include "hazard-engine.h"
 
-typedef enum build_mode {
-	NONE,
-	TILE,
-	SPRITE
-} build_mode;
+typedef struct haz_UIelement {
+	SDL_FRect rend;
+	SDL_FRect clip;
+	SDL_Texture *tex;
+} haz_UIelement;
 
-void hbuild_editMap(haz_engine *e);
-bool hbuild_saveMap(haz_engine *e, const char *filename);
+typedef struct haz_font {
+	SDL_Texture *tex;
+	SDL_FPoint bmp_size;
+	SDL_Point char_size;
+} haz_font;
 
-#endif //HAZARD_BUILD_H
+typedef struct haz_text {
+	SDL_Point pos;
+	double scale;
+	char *text;
+} haz_text;
+
+void haz_renderElement(haz_engine *e, haz_UIelement ui);
+void haz_renderText(haz_engine *e, haz_font *font, haz_text *msg);
+
+#endif //HAZARD_UI_H
